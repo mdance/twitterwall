@@ -1,0 +1,91 @@
+<?php
+
+/**
+ * Implementation of hook_schema().
+ */
+function twitterwall_schema() {
+  $schema['twitterwall'] = array(
+    'description' => 'Contains imported tweets',
+    'fields' => array(
+      'id' => array(
+        'description' => 'The primary key',
+        'type' => 'serial',
+      ),
+      'tweetid' => array(
+        'description' => 'The primary identifier for a tweet',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'created_at_epoch' => array(
+        'description' => 'The tweet date epoch format',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'created_at' => array(
+        'description' => 'The tweet date',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'profile_image_url' => array(
+        'description' => 'The url of the profile image',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'from_user' => array(
+        'description' => 'User that sent the tweet',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'from_userid' => array(
+        'description' => 'User ID that sent the tweet',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'to_user' => array(
+        'description' => 'User that received the tweet',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'message' => array(
+        'description' => 'The message',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'status' => array(
+        'description' => 'The status of the tweet',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implementation of hook_install().
+ */
+function twitterwall_install() {
+  drupal_install_schema('twitterwall');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function twitterwall_uninstall() {
+  drupal_uninstall_schema('twitterwall');
+
+  $sql = "DELETE FROM {variables} WHERE name LIKE 'twitterwall_%'";
+
+  db_query($sql);
+
+  drupal_set_message(t('Removed all twitterwall variables.'));
+}

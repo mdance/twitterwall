@@ -1,0 +1,4 @@
+name = Twitter Wall
+description = Provides twitter wall functionality.
+core = 6.x
+package = Twitter

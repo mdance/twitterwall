@@ -1,0 +1,570 @@
+<?php
+
+/**
+ * Implementation of hook_perm().
+ */
+function twitterwall_perm() {
+  return array(
+    'administer twitterwall',
+  );
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function twitterwall_menu() {
+  $items['twitterwall'] = array(
+    'title' => 'On Twitter',
+    'page callback' => 'twitterwall_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_SUGGESTED_ITEM,
+  );
+
+  $items['admin/settings/twitterwall'] = array(
+    'title' => 'Twitter Wall',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('twitterwall_admin_settings'),
+    'access arguments' => array('administer twitterwall'),
+    'type' => MENU_SUGGESTED_ITEM,
+  );
+
+  $items['admin/settings/twitterwall/admin'] = array(
+    'title' => 'Twitter Wall Administration',
+    'page callbacks' => 'drupal_get_form',
+    'page arguments' => array('twitterwall_adminpage'),
+    'access arguments' => array('administer twitterwall'),
+    'type' => MENU_SUGGESTED_ITEM,
+  );
+
+  return $items;
+}
+
+function twitterwall_admin_settings() {
+  $twitter_string = variable_get('twitterwall_string', '#drupal');
+
+  $form['twitterwall_string'] = array(
+     '#type' => 'textfield',
+     '#title' => t('Twitter String'),
+     '#default_value' => $twitter_string,
+     '#description' => t('Please enter the search string used to retrieve from twitter.'),
+  );
+
+  $form['twitterwall_count'] = array(
+    '#type' => 'select',
+    '#title' => t('Tweet Count'),
+    '#default_value' => variable_get('twitterwall_count', 50),
+    '#options' => array(
+      '10' => '10',
+      '25' => '25',
+      '50' => '50',
+    ),
+    '#description' => t('How many tweets should be retrieved'),
+  );
+
+  $period = drupal_map_assoc(array(0, 900, 1800, 3600, 5400, 7200), 'format_interval');
+
+  $period[0] = t('Every cron run');
+
+  $form['twitterwall_threshold'] = array(
+    '#type' => 'select',
+    '#title' => t('Tweet Retrieval Threshold'),
+    '#default_value' => variable_get('twitterwall_threshold', 0),
+    '#options' => $period,
+    '#description' => t('This determines how much time to wait before new tweets are retrieved.'),
+  );
+
+  $form['twitterwall_status'] = array(
+    '#type' => 'select',
+    '#title' => t('Default Tweet Status'),
+    '#default_value' => variable_get('twitterwall_status', 0),
+    '#options' => array(
+      '0' => t('Unpublished'),
+      '1' => t('Published'),
+    ),
+    '#description' => t('Should tweets be published automatically'),
+  );
+
+  $form['twitterwall_delete'] = array(
+    '#type' => 'select',
+    '#title' => t('Delete the Last Tweet ID'),
+    '#default_value' => variable_get('twitterwall_delete', 'no'),
+    '#options' => array(
+      'no' => t('No'),
+      'yes' => t('Yes')
+    ),
+    '#description' => t('The last tweet that is retrieved is remembered to try and avoid retrieving duplicate tweets, if you change the search string you may need to set this to yes.'),
+  );
+
+  return system_settings_form($form);
+}
+
+/**
+ * Performs a twitter search.
+ *
+ * @param $search
+ *   A search string.
+ *
+ * @return
+ *   An array of search results.
+ */
+function twitterwall_twitter_search($search) {
+  // This code was taken from the twitter module as I found the twitter module
+  // to be a bit too bloated for such a simple use
+  $output = array();
+
+  $url = 'http://search.twitter.com/search.json?q=' . urlencode($search['search']) . '&show_user=true&rpp=' . $search['rpp'];
+
+  if ( $search['last_twitter_id'] ) {
+    $url .= '&since_id=' . $search['last_twitter_id'];
+  }
+
+  $response = drupal_http_request($url, array(), 'GET');
+
+  if ( twitterwall_validrequest($response) ) {
+    $output = twitterwall_js2array($response->data);
+  }
+
+  return $output;
+}
+
+/**
+ * Internal JSON munging code.
+ *
+ * @param $data
+ *  JSON string returned by Twitter.
+ */
+function twitterwall_js2array($data) {
+  // Thanks twitter module
+  $results = array();
+  $json = json_decode($data);
+
+  if (!empty($json->results)) {
+    foreach($json->results as $status) {
+      $array = (array)$status;
+
+      $array['created_at_epoch'] = strtotime($array['created_at']);
+
+      $results[] = $array;
+    }
+  }
+
+  return $results;
+}
+
+/**
+ * Internal helper function to deal cleanly with various HTTP response codes.
+ */
+function twitterwall_validrequest($results) {
+  // Thanks twitter module
+  switch ($results->code) {
+    case '304':
+      // 304 Not Modified: there was no new data to return.
+      return FALSE;
+    case 400:
+      // 400 Bad Request: your request is invalid, and we'll return an error message that tells you why. This is the status code returned if you've exceeded the rate limit
+      watchdog('twitter', '400 Bad Request.');
+      return FALSE;
+    case 401:
+      // 401 Not Authorized: either you need to provide authentication credentials, or the credentials provided aren't valid.
+      watchdog('twitter', '401 Not Authorized.');
+      return FALSE;
+    case 403:
+      // 403 Forbidden: we understand your request, but are refusing to fulfill it.  An accompanying error message should explain why.
+      watchdog('twitter', '403 Forbidden.');
+      return FALSE;
+    case 404:
+      // 404 Not Found: either you're requesting an invalid URI or the resource in question doesn't exist (ex: no such user).
+      watchdog('twitter', '404 Not Found.');
+      return FALSE;
+    case 500:
+      // 500 Internal Server Error: we did something wrong.  Please post to the group about it and the Twitter team will investigate.
+      watchdog('twitter', '500 Internal Server Error.');
+      return FALSE;
+    case 502:
+      // 502 Bad Gateway: returned if Twitter is down or being upgraded.
+      watchdog('twitter', '502 Bad Gateway.');
+      return FALSE;
+    case 503:
+      // 503 Service Unavailable: the Twitter servers are up, but are overloaded with requests.  Try again later.
+      watchdog('twitter', '503 Service Unavailable.');
+      return FALSE;
+  }
+  // 200 OK: everything went awesome.
+  return TRUE;
+}
+
+/**
+ * Implementation of hook_cron().
+ */
+function twitterwall_cron() {
+  // Retrieve tweets every hour regardless of how often cron is run
+  $threshold = variable_get('twitterwall_threshold', 3600);
+
+  $time = time();
+  $lastsearchtime = variable_get('twitterwall_lastsearchtime', 0);
+
+  if ( ( $time - $lastsearchtime ) >= $threshold ) {
+    // Update the last search time
+    variable_set('twitterwall_lastsearchtime', $time);
+
+    $searchstring = variable_get('twitterwall_string', '#drupal');
+
+    $lastsearchstring = variable_get('twitterwall_lastsearch', '');
+
+    $delete = variable_get('twitterwall_delete', 'no');
+
+    $lasttwitterid = NULL;
+
+    if ( $delete == 'yes' ) {
+      // If the site administrator wants to delete the last twitter id
+      variable_del('twitterwall_last_twitter_id');
+      // Set the delete flag back to no
+      variable_set('twitterwall_delete', 'no');
+    }
+    else {
+      $lasttwitterid = variable_get('twitterwall_last_twitter_id', NULL);
+    }
+
+    if ( $searchstring != $lastsearchstring ) {
+      variable_set('twitterwall_lastsearch', $searchstring);
+    }
+
+    $count = variable_get('twitterwall_count', 50);
+
+    $search = array(
+      'search' => $searchstring,
+      'rpp' => $count,
+      'last_twitter_id' => $lasttwitterid,
+    );
+
+    $results = twitterwall_twitter_search($search);
+
+    if ( is_array($results) && count($results) ) {
+      $cache = FALSE;
+
+      $status = variable_get('twitterwall_status', 0);
+
+      foreach ( $results as $result ) {
+        if ( !$cache ) {
+          variable_set('twitterwall_last_twitter_id', $result['id']);
+          $cache = TRUE;
+        }
+
+        $sql = <<<EOF
+INSERT INTO {twitterwall}(tweetid, created_at_epoch, created_at, profile_image_url, from_user, from_userid, to_user, message, status)
+VALUES('%s', %d, '%s', '%s', '%s', '%s', '%s', '%s', %d)
+EOF;
+
+        db_query($sql, $result['id'], strtotime($result['created_at']), $result['created_at'], $result['profile_image_url'], $result['from_user'], $result['from_user_id'], $result['to_user_id'], $result['text'], $status);
+      }
+    }
+  }
+}
+
+function twitterwall_page() {
+  $sql = <<<EOF
+SELECT
+*
+FROM
+{twitterwall}
+WHERE
+status = 1
+ORDER BY created_at_epoch DESC
+LIMIT 0, 132
+EOF;
+
+  $result = db_query($sql);
+
+  $rows = array();
+
+  if ( $result ) {
+    while ( $row = db_fetch_array($result) ) {
+      $rows[] = $row;
+    }
+  }
+
+  if ( count($rows) ) {
+    $path = drupal_get_path('module', 'twitterwall');
+
+    drupal_add_css($path . '/css/twitterwall.css');
+    drupal_add_js($path . '/js/jquery.qtip-1.0.0-rc3.js');
+    drupal_add_js($path . '/js/twitterwall.js');
+
+    $output = theme('twitterwall_cloud', $rows);
+  }
+  else {
+    $output = t('There is no tweets available at this time.');
+  }
+
+  return $output;
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function twitterwall_theme() {
+  return array(
+    'twitterwall_cloud' => array(
+      'arguments' => array(
+        'rows' => NULL,
+      ),
+    ),
+    'twitterwall_admin_tweets' => array(
+      'arguments' => array(
+        'form' => NULL,
+      ),
+    ),
+  );
+}
+
+function theme_twitterwall_cloud($rows) {
+  $output = '';
+
+  if ( is_array($rows) ) {
+    foreach ( $rows as $row ) {
+      $output .= <<<EOF
+<div class="tweet" style="float: left; width: 48px; height: 48px; overflow: hidden;">
+  <a href="http://twitter.com/{$row['from_userid']}/status/{$row['tweetid']}" target="new"><img src="{$row['profile_image_url']}" alt="{$row['message']}" title="{$row['message']}" /></a>
+</div>
+EOF;
+    }
+  }
+
+  return $output;
+}
+
+function twitterwall_adminpage($form_state) {
+  if ( isset($form_state['values']['operation']) && $form_state['values']['operation'] == 'delete' ) {
+    return twitterwall_multiple_delete_confirm($form_state, array_filter($form_state['values']['tweets']));
+  }
+
+  $form['admin']  = twitterwall_admin_tweets();
+
+  return $form;
+}
+
+function twitterwall_multiple_delete_confirm(&$form_state, $tweets) {
+  $form['tweets'] = array(
+    '#prefix' => '<ul>',
+    '#suffix' => '</ul>',
+    '#tree' => TRUE
+  );
+
+  // array_filter returns only elements with TRUE values
+  foreach ($tweets as $id => $value) {
+    $form['tweets'][$id] = array(
+      '#type' => 'hidden',
+      '#value' => $id,
+      '#prefix' => '<li>',
+      '#suffix' => check_plain($value) ."</li>\n",
+    );
+  }
+
+  $form['operation'] = array(
+    '#type' => 'hidden',
+    '#value' => 'delete'
+  );
+
+  $form['#submit'][] = 'twitterwall_multiple_delete_confirm_submit';
+
+  return confirm_form(
+    $form,
+    t('Are you sure you want to delete these items?'),
+    'admin/settings/twitterwall/admin',
+    t('This action cannot be undone.'),
+    t('Delete all'),
+    t('Cancel')
+  );
+}
+
+function twitterwall_multiple_delete_confirm_submit($form, &$form_state) {
+  if ( $form_state['values']['confirm'] ) {
+    foreach ( $form_state['values']['tweets'] as $id => $value ) {
+      $sql = "DELETE FROM {twitterwall} WHERE id = %d";
+
+      db_query($sql, $id);
+    }
+
+    drupal_set_message(t('The items have been deleted.'));
+  }
+
+  $form_state['redirect'] = 'admin/settings/twitterwall/admin';
+
+  return;
+}
+
+function twitterwall_admin_tweets() {
+  $path = drupal_get_path('module', 'twitterwall');
+
+  drupal_add_js($path . '/js/twadmin.js');
+
+  $options = array(
+    'published' => t('Publish'),
+    'unpublish' => t('Unpublish'),
+    'delete' => t('Delete'),
+  );
+
+  $form['options'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Update options'),
+    '#prefix' => '<div class="container-inline">',
+    '#suffix' => '</div>',
+  );
+
+  $form['options']['operation'] = array(
+    '#type' => 'select',
+    '#options' => $options,
+    '#default_value' => 'publish',
+  );
+
+  $form['options']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Update'),
+    '#submit' => array('twitterwall_admin_tweets_submit'),
+  );
+
+  $headers = array(
+    array('data' => ''),
+    array('data' => t('Image')),
+    array('data' => t('Created At'), 'field' => 'created_at_epoch', 'sort' => 'desc'),
+    array('data' => t('From User'), 'field' => 'from_user'),
+    array('data' => t('Message'), 'field' => 'message'),
+    array('data' => t('Status'), 'field' => 'status', 'sort' => 'desc'),
+  );
+
+  $sql = "SELECT * FROM {twitterwall}";
+
+  $sql .= tablesort_sql($headers);
+
+  $result = pager_query($sql, variable_get('twitterwall_count', 50));
+
+  $rows = array();
+
+  if ( $result ) {
+    while ( $row = db_fetch_array($result) ) {
+      $tweets[$row['id']] = '';
+
+      $form['profile_image_url'][$row['id']] = array(
+        '#value' => '<img src="' . $row['profile_image_url'] . '" />',
+      );
+
+      $form['created_at'][$row['id']] = array(
+        '#value' => $row['created_at'],
+      );
+
+      $form['from_user'][$row['id']] = array(
+        '#value' => $row['from_user'],
+      );
+
+      $form['message'][$row['id']] = array(
+        '#value' => $row['message'],
+      );
+
+      $form['status'][$row['id']] = array(
+        '#value' => ( $row['status'] == '1' ) ? t('Published') : t('Unpublished'),
+      );
+    }
+  }
+
+  $form['tweets'] = array(
+    '#type' => 'checkboxes',
+    '#options' => $tweets
+  );
+
+  $form['pager'] = array(
+    '#value' => theme('pager', NULL, variable_get('twitterwall_count', 50), 0)
+  );
+
+  $form['selectall'] = array(
+    '#type' => 'checkbox',
+    '#title' => '',
+  );
+
+  $form['#theme'] = 'twitterwall_admin_tweets';
+
+  return $form;
+}
+
+function theme_twitterwall_admin_tweets($form) {
+  $headers = array(
+    array('data' => drupal_render($form['selectall'])),
+    array('data' => t('Image')),
+    array('data' => t('Created At'), 'field' => 'created_at_epoch', 'sort' => 'desc'),
+    array('data' => t('From User'), 'field' => 'from_user'),
+    array('data' => t('Message'), 'field' => 'message'),
+    array('data' => t('Status'), 'field' => 'status', 'sort' => 'desc'),
+  );
+
+  $output = '';
+
+  $output .= drupal_render($form['options']);
+
+  $rows = array();
+
+  foreach ( element_children($form['message']) as $key ) {
+    $row = array();
+
+    $row[] = drupal_render($form['tweets'][$key]);
+    $row[] = drupal_render($form['profile_image_url'][$key]);
+    $row[] = drupal_render($form['created_at'][$key]);
+    $row[] = drupal_render($form['from_user'][$key]);
+    $row[] = drupal_render($form['message'][$key]);
+    $row[] = drupal_render($form['status'][$key]);
+
+    $rows[] = $row;
+  }
+
+  $output .= theme('table', $headers, $rows);
+
+  if ( $form['pager']['#value'] ) {
+    $output .= drupal_render($form['pager']);
+  }
+
+  $output .= drupal_render($form);
+
+  return $output;
+}
+
+function twitterwall_admin_tweets_submit($form, &$form_state) {
+  $values = $form_state['values'];
+
+  $tweets = array_filter($values['tweets']);
+
+  if ( is_array($tweets) && count($tweets) ) {
+    $status = NULL;
+
+    switch ( $values['operation'] ) {
+      case 'unpublished' :
+        $status = 0;
+        $message = t('The tweets have been unpublished.');
+
+        break;
+      case 'published' :
+        $status = 1;
+        $message = t('The tweets have been published.');
+
+        break;
+      case 'delete' :
+        $status = 2;
+        $message = t('The tweets have been deleted.');
+
+        break;
+    }
+
+    if ( $status == 0 || $status == 1 ) {
+      $sql = "UPDATE {twitterwall} SET status = %d WHERE id IN (%s)";
+
+      db_query($sql, $status, implode($tweets, ','));
+    }
+    else if ( $status == 2 ) {
+      $sql = "DELETE FROM {twitterwall} WHERE id IN (%s)";
+
+      db_query($sql, implode($tweets, ','));
+    }
+  }
+  else {
+    $message = t('You must select at least one tweet.');
+  }
+
+  drupal_set_message($message);
+}
