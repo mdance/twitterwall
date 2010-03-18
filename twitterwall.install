@@ -87,6 +87,15 @@ function twitterwall_update_6000() {
 }
 
 /**
+ * Twitpocalypse then!
+ */
+function twitterwall_update_6000() {
+  $ret = array() ;
+  db_change_field($ret, 'twitterwall', 'tweetid', 'tweetid', array('type' => 'varchar', 'length' => '255'));  
+  return $ret ;
+}
+
+/**
  * Implementation of hook_uninstall().
  */
 function twitterwall_uninstall() {
