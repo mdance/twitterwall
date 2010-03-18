@@ -6,6 +6,8 @@
 function twitterwall_perm() {
   return array(
     'administer twitterwall',
+    'add tweets',
+    'enter custom twitter handle', // silly name    
   );
 }
 
@@ -14,26 +16,42 @@ function twitterwall_perm() {
  */
 function twitterwall_menu() {
   $items['twitterwall'] = array(
-    'title' => 'On Twitter',
+    'title' => t('On Twitter'),
     'page callback' => 'twitterwall_page',
     'access arguments' => array('access content'),
     'type' => MENU_SUGGESTED_ITEM,
   );
 
   $items['admin/settings/twitterwall'] = array(
-    'title' => 'Twitter Wall',
+    'title' => t('Twitter Wall'),
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('twitterwall_admin_settings'),
+    'page arguments' => array('twitterwall_adminpage'),
     'access arguments' => array('administer twitterwall'),
-    'type' => MENU_SUGGESTED_ITEM,
+    'type' => MENU_NORMAL_ITEM,
   );
 
   $items['admin/settings/twitterwall/admin'] = array(
-    'title' => 'Twitter Wall Administration',
+    'title' => t('Administer Tweets'),
     'page callbacks' => 'drupal_get_form',
     'page arguments' => array('twitterwall_adminpage'),
     'access arguments' => array('administer twitterwall'),
-    'type' => MENU_SUGGESTED_ITEM,
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+
+  $items['admin/settings/twitterwall/add'] = array(
+    'title' => t('Add Tweet'),
+    'page callbacks' => 'drupal_get_form',
+    'page arguments' => array('twitterwall_add_tweet_form'),
+    'access arguments' => array('add tweets'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  $items['admin/settings/twitterwall/settings'] = array(
+    'title' => t('Settings'),
+    'page callbacks' => 'drupal_get_form',
+    'page arguments' => array('twitterwall_admin_settings'),
+    'access arguments' => array('administer twitterwall'),
+    'type' => MENU_LOCAL_TASK,
   );
 
   return $items;
@@ -595,3 +613,133 @@ function twitterwall_admin_tweets_submit($form, &$form_state) {
 
   drupal_set_message($message);
 }
+
+/**
+ * We might as well follow the standard menu structure though (esp as
+ * we *love* admin_menu). Can we do add this menu entry into the
+ * Content => Create => menu without using the node/add path? That'd
+ * be nice.
+ *
+ * We're also going to leave a few items blank - Twitter ID etc - as
+ * these don't apply outside of Twitter. This may be an issue given
+ * that the module uses that as a cache key.
+ */
+function twitterwall_add_tweet_form() {
+  $form['#attributes']['enctype'] = 'multipart/form-data';
+    
+  $form['message'] = array(
+    '#title' => t('Message'),
+    '#type' => 'textarea',
+  ) ;
+    
+  $form['from_user'] = array(
+    '#title' => t('Your name'),
+    '#type' => 'textfield',
+    '#default_value' => '',
+  ) ;
+
+  global $user ;
+  if ( $user->uid != 0 ) {
+    $form['from_user']['#default_value'] = $user->name ;
+    if ( !user_access('enter custom twitter handle') ) {
+      $form['from_user']['#type'] = 'value' ;
+    }
+  }
+
+  $form['profile_image'] = array(
+    '#type' => 'file',
+    '#title' => t('Profile Image'),
+  ) ;
+    
+  $form['op'] = array( 
+    '#type' => 'submit',
+    '#value' => 'Submit',
+  ) ;
+
+
+  $form['#validate'][] = 'twitterwall_validate_picture';
+
+  return $form ;
+
+}
+
+function twitterwall_add_tweet_form_validate($form_id, &$form_state) {
+    if ( empty($form_state['values']['from_user']) ) {
+        form_set_error('form_user', t('You must add a username to send this message from.'));
+    }
+    if ( empty($form_state['values']['message']) ) {
+        form_set_error('message', t('You must add a message to post.'));
+    }
+    if ( empty($form_state['values']['picture']) ) {
+        // we really should see if this username has associated an
+        // image before here
+        form_set_error('profile_image', t('You must upload an image with each tweet.'));
+    }
+}
+
+/**
+ * 
+ */
+function twitterwall_add_tweet_form_submit($form_id, &$form_state) {
+  $tweet = array(
+    'id' => '',
+    'created_at' => date('r'),
+    'profile_image_url' => $form_state['values']['picture'],
+    'from_user' => $form_state['values']['from_user'],
+    'from_user_id' => '',
+    'to_user_id' => '',
+    'text' => $form_state['values']['message'],
+    'status' => 0,
+  ) ;
+  
+  twitterwall_add_tweet($tweet, 1) ;
+}
+
+/**
+ * Validate the picture. Handle upload. If imagecache is available,
+ * alter the URL to include the imagecache path.
+ */
+function twitterwall_validate_picture(&$form, &$form_state) {
+  $validators = array(
+    'file_validate_is_image' => array(),
+    'file_validate_image_resolution' => array(
+      variable_get('twitterwall_max_picture_dimensions','800x600'), 
+      variable_get('twitterwall_min_picture_dimensions', '48x48')
+    ),
+    'file_validate_size' => array(
+      variable_get('twitterwall_max_picture_file_size', 0.5 * 1024 * 1024)
+    ),
+  ) ;
+  if ( $file = file_save_upload('profile_image', $validators, file_directory_path()) ) {
+    // The image was saved using file_save_upload() and was added to the
+    // files table as a temporary file. We'll make a copy and let the garbage
+    // collector delete the original upload.
+    $info = image_get_info($file->filepath);
+
+    $directory = file_create_path(variable_get('twitterwall_image_path','twitterwall')) ;
+    if ( file_check_directory($directory, FILE_CREATE_DIRECTORY) ) {
+      $destination = $directory .'/tweet-'. md5($form['values']['from_user']) .'.'. $info['extension'];
+      if (file_copy($file, $destination, FILE_EXISTS_REPLACE)) {
+        $form_state['values']['picture'] = url($destination);
+      }
+      else {
+        form_set_error('profile_image', t("Failed to upload the profile image; the %directory directory doesn't exist or is not writable.", array('%directory' => variable_get('twitterwall_image_path', 'twitterwall'))));
+      }      
+    }
+  }
+}
+
+function twitterwall_add_tweet($result, $cache) {
+  if ( !$cache ) {
+    variable_set('twitterwall_last_twitter_id', $result['id']);
+    $cache = TRUE;
+  }
+  
+  $sql = <<<EOF
+INSERT INTO {twitterwall} (tweetid, created_at_epoch, created_at, profile_image_url, from_user, from_userid, to_user, message, status)
+     VALUES ('%s', %d, '%s', '%s', '%s', '%s', '%s', '%s', %d)
+EOF;
+
+  db_query($sql, $result['id'], strtotime($result['created_at']), $result['created_at'], $result['profile_image_url'], $result['from_user'], $result['from_user_id'], $result['to_user_id'], $result['text'], $status);
+}
+
