@@ -16,14 +16,14 @@ function twitterwall_perm() {
  */
 function twitterwall_menu() {
   $items['twitterwall'] = array(
-    'title' => t('On Twitter'),
+    'title' => 'On Twitter',
     'page callback' => 'twitterwall_page',
     'access arguments' => array('access content'),
     'type' => MENU_SUGGESTED_ITEM,
   );
 
   $items['admin/settings/twitterwall'] = array(
-    'title' => t('Twitter Wall'),
+    'title' => 'Twitter Wall',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('twitterwall_adminpage'),
     'access arguments' => array('administer twitterwall'),
@@ -32,7 +32,7 @@ function twitterwall_menu() {
   );
 
   $items['admin/settings/twitterwall/admin'] = array(
-    'title' => t('Administer Tweets'),
+    'title' => 'Administer Tweets',
     'page callbacks' => 'drupal_get_form',
     'page arguments' => array('twitterwall_adminpage'),
     'access arguments' => array('administer twitterwall'),
@@ -42,7 +42,7 @@ function twitterwall_menu() {
   );
 
   $items['admin/settings/twitterwall/add'] = array(
-    'title' => t('Add Tweet'),
+    'title' => 'Add Tweet',
     'page callbacks' => 'drupal_get_form',
     'page arguments' => array('twitterwall_add_tweet_form'),
     'access arguments' => array('add tweets'),
@@ -52,7 +52,7 @@ function twitterwall_menu() {
   );
 
   $items['admin/settings/twitterwall/settings'] = array(
-    'title' => t('Settings'),
+    'title' => 'Settings',
     'page callbacks' => 'drupal_get_form',
     'page arguments' => array('twitterwall_admin_settings'),
     'access arguments' => array('administer twitterwall'),
