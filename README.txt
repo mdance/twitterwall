@@ -29,6 +29,8 @@ Installation
     
 Configuration
 -------------
+
+ 0. Go to Admin -> User -> Permissions and configure permissions.
     
  1. Go to Admin -> Settings -> Twitter Wall and configure any admin settings
 

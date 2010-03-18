@@ -338,7 +338,7 @@ EOF;
     $output = theme('twitterwall_cloud', $rows);
   }
   else {
-    $output = t('There is no tweets available at this time.');
+    $output = t('There are no tweets available at this time.');
   }
 
   return $output;
@@ -369,7 +369,7 @@ function theme_twitterwall_cloud($rows) {
     foreach ( $rows as $row ) {
       $output .= <<<EOF
 <div class="tweet" style="float: left; width: 48px; height: 48px; overflow: hidden;">
-  <a href="http://twitter.com/{$row['from_userid']}/status/{$row['tweetid']}" target="new"><img src="{$row['profile_image_url']}" alt="{$row['message']}" title="{$row['message']}" /></a>
+  <a href="http://twitter.com/{$row['from_user']}/status/{$row['tweetid']}" target="new"><img src="{$row['profile_image_url']}" alt="{$row['message']}" title="{$row['message']}" /></a>
 </div>
 EOF;
     }
