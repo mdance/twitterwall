@@ -39,6 +39,33 @@ function twitterwall_menu() {
   return $items;
 }
 
+/**
+ * Implement hook_block() 
+ */
+function twitterwall_block($op = 'list', $delta = 0, $edit = array()) {
+  switch ( $op ) {
+    case 'list' :
+      $blocks[0] = array(
+        'info' => t('TwitterWall'),
+        'cache' => BLOCK_NO_CACHE,
+      ) ;
+      return $blocks ;
+    case 'view' :
+      $block = array(
+        'subject' => t('TwitterWall'),
+        'content' => twitterwall_page(),
+      ) ;
+      return $block ;
+    case 'configure' :
+    case 'save' :
+      // ?
+      return ;
+  }
+}
+
+/**
+ * Admin settings screen for TwitterWall
+ */
 function twitterwall_admin_settings() {
   $twitter_string = variable_get('twitterwall_string', '#drupal');
 
