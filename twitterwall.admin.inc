@@ -174,19 +174,21 @@ function twitterwall_admin_tweets() {
   if ( $result ) {
     while ( $row = db_fetch_array($result) ) {
       $tweets[$row['id']] = '';
-
+      
+      $profile_url = 'http://twitter.com/'.$row['from_user'] ;
+      
       $form['profile_image_url'][$row['id']] = array(
-        '#value' => '<img src="' . $row['profile_image_url'] . '" />',
+        '#value' => l(theme('image', $row['profile_image_url'], $row['from_user'], '', NULL, FALSE), $profile_url, array('html'=>TRUE)),
       );
-
+      
       $form['created_at'][$row['id']] = array(
         '#value' => $row['created_at'],
       );
-
+      
       $form['from_user'][$row['id']] = array(
-        '#value' => $row['from_user'],
+        '#value' => l($row['from_user'], $profile_url),
       );
-
+      
       $form['message'][$row['id']] = array(
         '#value' => $row['message'],
       );
