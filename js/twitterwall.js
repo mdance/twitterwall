@@ -27,7 +27,8 @@ $(document).ready(function()
         position: {
           adjust: {
             x: -15,
-            y: -15
+            y: -15,
+            screen: true
           }
         }
       });
@@ -66,7 +67,8 @@ $(document).ready(function()
           position: {
             adjust: {
               x: -15,
-              y: -15
+              y: -15,
+              screen: true
             }
           }
         });
