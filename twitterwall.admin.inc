@@ -125,12 +125,21 @@ function twitterwall_multiple_delete_confirm_submit($form, &$form_state) {
 }
 
 function twitterwall_admin_tweets() {
+  if ( $status_label = arg(4) ) {
+    $status = ( $status_label == 'published' ) ? 1 : 0 ; 
+  }
+  else {
+    $status = NULL ;
+  }
+  $pager_num = 1 ;
+  $items = 5 ;
+
   $path = drupal_get_path('module', 'twitterwall');
 
   drupal_add_js($path . '/js/twadmin.js');
 
   $options = array(
-    'published' => t('Publish'),
+    'publish' => t('Publish'),
     'unpublish' => t('Unpublish'),
     'delete' => t('Delete'),
   );
@@ -145,7 +154,7 @@ function twitterwall_admin_tweets() {
   $form['options']['operation'] = array(
     '#type' => 'select',
     '#options' => $options,
-    '#default_value' => 'publish',
+    '#default_value' => ( $status == 1 ) ? 'unpublish' : 'publish',
   );
 
   $form['options']['submit'] = array(
@@ -164,10 +173,13 @@ function twitterwall_admin_tweets() {
   );
 
   $sql = "SELECT * FROM {twitterwall}";
+  if ( $status !== NULL ) {
+    $sql .= " WHERE status = %d" ;
+  }
 
   $sql .= tablesort_sql($headers);
 
-  $result = pager_query($sql, variable_get('twitterwall_count', 50));
+  $result = pager_query(db_rewrite_sql($sql), variable_get('twitterwall_count', 50), 1, NULL, $status);
 
   $rows = array();
 
@@ -205,8 +217,8 @@ function twitterwall_admin_tweets() {
   );
 
   $form['pager'] = array(
-    '#value' => theme('pager', NULL, variable_get('twitterwall_count', 50), 0)
-  );
+    '#value' => theme('pager', NULL, $items, $pager_num),
+  ) ;
 
   $form['selectall'] = array(
     '#type' => 'checkbox',
@@ -267,12 +279,12 @@ function twitterwall_admin_tweets_submit($form, &$form_state) {
     $status = NULL;
 
     switch ( $values['operation'] ) {
-      case 'unpublished' :
+      case 'unpublish' :
         $status = 0;
         $message = t('The tweets have been unpublished.');
 
         break;
-      case 'published' :
+      case 'publish' :
         $status = 1;
         $message = t('The tweets have been published.');
 

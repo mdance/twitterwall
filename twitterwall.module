@@ -41,6 +41,26 @@ function twitterwall_menu() {
     'file' => 'twitterwall.admin.inc',
   );
 
+  $items['admin/settings/twitterwall/admin/unpublished'] = array(
+    'title' => 'Unpublished',
+    'page callbacks' => 'drupal_get_form',
+    'page arguments' => array('twitterwall_adminpage'),
+    'access arguments' => array('administer twitterwall'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 0,
+    'file' => 'twitterwall.admin.inc',
+  );
+
+  $items['admin/settings/twitterwall/admin/published'] = array(
+    'title' => 'Published',
+    'page callbacks' => 'drupal_get_form',
+    'page arguments' => array('twitterwall_adminpage'),
+    'access arguments' => array('administer twitterwall'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 10,
+    'file' => 'twitterwall.admin.inc',
+  );
+
   $items['admin/settings/twitterwall/add'] = array(
     'title' => 'Add Tweet',
     'page callbacks' => 'drupal_get_form',
