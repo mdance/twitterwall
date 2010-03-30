@@ -23,6 +23,10 @@ function twitterwall_admin_settings() {
       '10' => '10',
       '25' => '25',
       '50' => '50',
+      '100' => '100',
+      '250' => '250',
+      '500' => '500',
+      '1000' => '1000',
     ),
     '#description' => t('How many tweets should be retrieved'),
   );
